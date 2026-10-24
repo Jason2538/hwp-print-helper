@@ -1,0 +1,764 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>인쇄 도우미</title>
+<style id="pageStyle"></style>
+<style>
+:root{
+  --bg:#f3f4f6; --card:#fff; --ink:#1f2937; --sub:#6b7280; --line:#e5e7eb;
+  --accent:#2563eb; --accent-ink:#fff; --warn:#b45309; --warn-bg:#fffbeb; --err:#b91c1c; --err-bg:#fef2f2;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+button,input,select{font:inherit;color:inherit}
+.app{display:grid;grid-template-rows:auto 1fr;height:100vh}
+header{display:flex;align-items:center;gap:12px;padding:10px 18px;background:var(--card);border-bottom:1px solid var(--line)}
+header h1{font-size:16px;margin:0;font-weight:700}
+header .tag{font-size:12px;color:var(--sub)}
+header .sp{flex:1}
+main{display:grid;grid-template-columns:372px 1fr;min-height:0}
+.panel{overflow:auto;padding:14px;display:flex;flex-direction:column;gap:12px;border-right:1px solid var(--line);background:var(--bg)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h2{font-size:12px;letter-spacing:.02em;color:var(--sub);margin:0 0 10px;font-weight:700}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0;flex-wrap:wrap}
+.row>label.t{width:62px;color:var(--sub);flex:none}
+.grow{flex:1}
+select,input[type=number],input[type=text]{border:1px solid #d1d5db;border-radius:7px;padding:6px 8px;background:#fff;min-width:0}
+input[type=number]{width:72px}
+input[type=text]{width:100%}
+select{max-width:100%}
+.seg{display:inline-flex;border:1px solid #d1d5db;border-radius:8px;overflow:hidden}
+.seg label{padding:6px 12px;cursor:pointer;border-right:1px solid #d1d5db;background:#fff;user-select:none}
+.seg label:last-child{border-right:0}
+.seg input{display:none}
+.seg input:checked+span{font-weight:700;color:var(--accent-ink)}
+.seg label:has(input:checked){background:var(--accent);color:var(--accent-ink)}
+.chk{display:flex;align-items:center;gap:7px;margin:6px 0;cursor:pointer}
+.small{font-size:12px;color:var(--sub)}
+.btn{border:1px solid #d1d5db;background:#fff;border-radius:8px;padding:7px 12px;cursor:pointer}
+.btn:hover{background:#f9fafb}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700;padding:11px 14px;width:100%;font-size:15px}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.primary:disabled{opacity:.45;cursor:not-allowed;filter:none}
+.btn.mini{padding:3px 9px;font-size:12px;border-radius:6px}
+.fileinfo{margin-top:8px;line-height:1.5}
+.fileinfo b{word-break:break-all}
+details{margin-top:10px}
+details summary{cursor:pointer;color:var(--accent);font-size:13px}
+details ol{margin:8px 0 0;padding-left:20px;line-height:1.6;font-size:13px}
+.note{font-size:12px;line-height:1.5;color:var(--sub);margin:8px 0 0}
+.sticky{position:sticky;bottom:-14px;margin:0 -14px -14px;padding:12px 14px;background:linear-gradient(to top,var(--bg) 78%,transparent)}
+.stage{position:relative;display:flex;flex-direction:column;min-width:0;min-height:0}
+.toolbar{display:flex;align-items:center;gap:10px;padding:10px 16px;flex-wrap:wrap;border-bottom:1px solid var(--line);background:var(--card)}
+.toolbar .info{flex:1;min-width:200px;line-height:1.5}
+.nav{display:flex;align-items:center;gap:6px}
+.nav button{width:32px;height:32px;padding:0}
+.view{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;align-items:center;gap:10px;padding:18px}
+#sheetCanvas{background:#fff;box-shadow:0 2px 14px rgba(0,0,0,.18);display:block;max-width:100%}
+.msgs{width:100%;max-width:760px;display:flex;flex-direction:column;gap:6px}
+.msg{padding:8px 12px;border-radius:8px;font-size:13px;line-height:1.5}
+.msg.warn{background:var(--warn-bg);color:var(--warn);border:1px solid #fde68a}
+.msg.err{background:var(--err-bg);color:var(--err);border:1px solid #fecaca}
+.drop{margin:auto;max-width:520px;text-align:center;border:2px dashed #cbd5e1;border-radius:16px;padding:44px 28px;background:var(--card)}
+.drop h3{margin:0 0 8px;font-size:18px}
+.drop p{margin:6px 0;color:var(--sub);line-height:1.6}
+.drop.over{border-color:var(--accent);background:#eff6ff}
+#busy{position:fixed;inset:0;background:rgba(17,24,39,.55);display:flex;align-items:center;justify-content:center;z-index:50}
+#busy[hidden]{display:none}
+#busy .box{background:#fff;border-radius:12px;padding:22px 26px;min-width:280px;text-align:center}
+#busy progress{width:100%;margin:12px 0}
+[hidden]{display:none!important}
+
+#printRoot{display:none}
+@media print{
+  html,body{height:auto;background:#fff}
+  .app,#busy{display:none!important}
+  #printRoot{display:block}
+  .sheet{position:relative;overflow:hidden;break-after:page;page-break-after:always;background:#fff}
+  .sheet:last-child{break-after:auto;page-break-after:auto}
+  .cell{position:absolute;overflow:hidden}
+  .pg{position:absolute}
+  .pg img{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .pg .fr{position:absolute;inset:0;border:.25mm solid #777;box-sizing:border-box}
+}
+@media (max-width:860px){
+  main{grid-template-columns:1fr;grid-template-rows:auto 1fr}
+  .panel{border-right:0;border-bottom:1px solid var(--line);max-height:48vh}
+}
+</style>
+</head>
+<body>
+<div class="app" id="app">
+  <header>
+    <h1>인쇄 도우미</h1>
+    <span class="tag">한글(.hwp)·PDF를 용지 크기에 맞춰 자유롭게 인쇄</span>
+    <span class="sp"></span>
+    <button class="btn" id="btnOpenTop" type="button">파일 열기</button>
+  </header>
+  <main>
+    <aside class="panel">
+      <div class="card">
+        <h2>1. 파일</h2>
+        <button class="btn" id="btnOpen" type="button">한글(.hwp) / PDF 파일 선택…</button>
+        <input type="file" id="fileInput" accept=".hwp,.pdf,application/pdf,.hwpx" hidden>
+        <div class="fileinfo small" id="fileInfo">아직 불러온 파일이 없어요.</div>
+        <details>
+          <summary>배포용(읽기 전용) 문서도 열려요?</summary>
+          <p class="note">네. 한글 5.x 이후의 .hwp 파일은 <b>배포용 문서</b>도 그대로 불러와요. 파일은 이 컴퓨터 안에서만 읽고 어디에도 보내지 않으며, 원본 파일도 바꾸지 않아요.</p>
+          <p class="note">한글과 똑같이 그리는 것은 아니에요. 수식·특수 도형·일부 그림 형식은 다르게 보일 수 있으니 <b>인쇄 전에 미리보기를 꼭 확인</b>하세요. 암호가 걸린 문서와 .hwpx는 열 수 없어요. 그런 경우 한글에서 PDF로 저장한 파일(PDF)을 여기서 열 수 있어요.</p>
+        </details>
+      </div>
+
+      <div class="card">
+        <h2>2. 용지</h2>
+        <div class="row">
+          <label class="t" for="paper">용지</label>
+          <select id="paper" class="grow">
+            <option value="A4" selected>A4 (210 × 297mm)</option>
+            <option value="A3">A3 (297 × 420mm)</option>
+            <option value="A5">A5 (148 × 210mm)</option>
+            <option value="B4">B4 (257 × 364mm)</option>
+            <option value="B5">B5 (182 × 257mm)</option>
+            <option value="Letter">Letter (216 × 279mm)</option>
+            <option value="Legal">Legal (216 × 356mm)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label class="t">방향</label>
+          <div class="seg" id="orientSeg">
+            <label><input type="radio" name="orient" value="auto" checked><span>자동</span></label>
+            <label><input type="radio" name="orient" value="portrait"><span>세로</span></label>
+            <label><input type="radio" name="orient" value="landscape"><span>가로</span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>3. 크기</h2>
+        <div class="row">
+          <div class="seg">
+            <label><input type="radio" name="mode" value="fit" checked><span>용지에 맞춤</span></label>
+            <label><input type="radio" name="mode" value="custom"><span>배율 직접 입력</span></label>
+          </div>
+        </div>
+        <label class="chk" id="enlargeWrap"><input type="checkbox" id="enlarge"> 작은 문서도 용지에 맞게 확대</label>
+        <div class="row" id="pctWrap">
+          <label class="t" for="pct">배율</label>
+          <input type="number" id="pct" min="5" max="800" step="1" value="100"> <span>%</span>
+          <button class="btn mini" type="button" data-pct="90">90</button>
+          <button class="btn mini" type="button" data-pct="80">80</button>
+          <button class="btn mini" type="button" data-pct="70">70</button>
+        </div>
+        <label class="chk"><input type="checkbox" id="center" checked> 가운데에 놓기</label>
+      </div>
+
+      <div class="card">
+        <h2>4. 여백 (mm)</h2>
+        <div class="row">
+          <button class="btn mini" type="button" data-m="0">없음</button>
+          <button class="btn mini" type="button" data-m="5">좁게</button>
+          <button class="btn mini" type="button" data-m="10">보통</button>
+          <button class="btn mini" type="button" data-m="20">넓게</button>
+        </div>
+        <div class="row">
+          <label class="t" for="mt">위</label><input type="number" id="mt" min="0" max="60" step="1" value="10">
+          <label class="t" for="mb" style="width:auto;margin-left:8px">아래</label><input type="number" id="mb" min="0" max="60" step="1" value="10">
+        </div>
+        <div class="row">
+          <label class="t" for="ml">왼쪽</label><input type="number" id="ml" min="0" max="60" step="1" value="10">
+          <label class="t" for="mr" style="width:auto;margin-left:8px">오른쪽</label><input type="number" id="mr" min="0" max="60" step="1" value="10">
+        </div>
+        <label class="chk"><input type="checkbox" id="linkm" checked> 네 면을 같은 값으로</label>
+      </div>
+
+      <div class="card">
+        <h2>5. 쪽 선택 · 모아찍기</h2>
+        <div class="row">
+          <label class="t" for="range">쪽 범위</label>
+          <input type="text" id="range" class="grow" placeholder="비우면 전체  예) 1-3, 5, 8-">
+        </div>
+        <div class="row">
+          <label class="t" for="nup">모아찍기</label>
+          <select id="nup">
+            <option value="1" selected>한 장에 1쪽</option>
+            <option value="2">한 장에 2쪽</option>
+            <option value="4">한 장에 4쪽</option>
+            <option value="6">한 장에 6쪽</option>
+            <option value="9">한 장에 9쪽</option>
+          </select>
+        </div>
+        <label class="chk" id="frameWrap"><input type="checkbox" id="frame" checked> 쪽마다 테두리 그리기</label>
+      </div>
+
+      <div class="card">
+        <h2>6. 인쇄 품질</h2>
+        <div class="row">
+          <select id="dpi" class="grow">
+            <option value="150">보통 (150dpi · 빠름)</option>
+            <option value="200" selected>좋음 (200dpi)</option>
+            <option value="300">최고 (300dpi · 느림)</option>
+          </select>
+        </div>
+        <p class="note">인쇄 창이 열리면 <b>배율 100%(기본)</b>, <b>머리글·바닥글 끄기</b>로 두세요. 프린터에 따라 가장자리 4~5mm는 인쇄되지 않을 수 있어요.</p>
+      </div>
+
+      <div class="sticky">
+        <button class="btn primary" id="btnPrint" type="button" disabled>인쇄하기</button>
+      </div>
+    </aside>
+
+    <section class="stage" id="stage">
+      <div class="toolbar" id="toolbar" hidden>
+        <div class="info small" id="info"></div>
+        <div class="nav">
+          <button class="btn" id="prev" type="button" aria-label="이전 장">◀</button>
+          <span id="sheetNo">1 / 1</span>
+          <button class="btn" id="next" type="button" aria-label="다음 장">▶</button>
+        </div>
+      </div>
+      <div class="view" id="view">
+        <div class="drop" id="drop">
+          <h3>한글(.hwp) 또는 PDF 파일을 여기에 끌어다 놓으세요</h3>
+          <p>또는 왼쪽의 <b>파일 선택…</b> 버튼을 눌러요.</p>
+          <p>배포용(읽기 전용) 한글 문서도 그대로 열어서 B4 → A4 등으로 맞춰 인쇄할 수 있어요.</p>
+        </div>
+        <div class="msgs" id="msgs"></div>
+        <canvas id="sheetCanvas" hidden></canvas>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="printRoot"></div>
+
+<div id="busy" hidden>
+  <div class="box">
+    <div id="busyText">인쇄 준비 중…</div>
+    <progress id="busyBar" max="1" value="0"></progress>
+    <button class="btn" id="busyCancel" type="button">취소</button>
+  </div>
+</div>
+
+<script>__PDF_JS__</script>
+<script>__WORKER_JS__</script>
+<script>__HWP_JS__</script>
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const PT = 25.4 / 72; // pt -> mm
+
+const PAPERS = {
+  A3:{w:297,h:420}, A4:{w:210,h:297}, A5:{w:148,h:210},
+  B4:{w:257,h:364}, B5:{w:182,h:257},
+  Letter:{w:215.9,h:279.4}, Legal:{w:215.9,h:355.6}
+};
+const KNOWN = [
+  ['A3',297,420],['A4',210,297],['A5',148,210],
+  ['B4',257,364],['B4',250,353],['B5',182,257],['B5',176,250],
+  ['Letter',215.9,279.4],['Legal',215.9,355.6]
+];
+
+/* ---------- 상태 ---------- */
+const S = { pdf:null, hwp:null, fileMsgs:[], name:'', n:0, sizes:[], pageCache:new Map(), sheetIdx:0, plan:null };
+let pdfjs = null, libsPromise = null;
+let renderTasks = new Set(), previewToken = 0, previewTimer = 0, printCancelled = false;
+
+/* ---------- PDF 라이브러리(파일 안에 포함) 준비 ---------- */
+function loadLibs(){
+  if (!libsPromise) libsPromise = Promise.resolve().then(() => {
+    const mod = globalThis.__pdfjs;
+    if (!mod || !globalThis.pdfjsWorker) throw new Error('PDF 엔진이 파일 안에 없어요. 인쇄도우미.html을 다시 받아주세요.');
+    mod.GlobalWorkerOptions.workerSrc = 'about:blank'; // 같은 파일 안의 엔진을 쓰므로 실제로는 쓰지 않아요
+    pdfjs = mod;
+    return mod;
+  });
+  return libsPromise;
+}
+
+/* ---------- 도우미 ---------- */
+function describeSize(wMm, hMm){
+  const a = Math.min(wMm, hMm), b = Math.max(wMm, hMm);
+  for (const [name, w, h] of KNOWN){
+    if (Math.abs(a - w) <= 3 && Math.abs(b - h) <= 3) return name;
+  }
+  return Math.round(a) + '×' + Math.round(b) + 'mm';
+}
+const num = (el, def, lo, hi) => {
+  let v = parseFloat(el.value);
+  if (!isFinite(v)) v = def;
+  return Math.min(hi, Math.max(lo, v));
+};
+function gridFor(n, landscape){
+  switch (n){
+    case 2: return landscape ? [2,1] : [1,2];
+    case 4: return [2,2];
+    case 6: return landscape ? [3,2] : [2,3];
+    case 9: return [3,3];
+    default: return [1,1];
+  }
+}
+function parseRange(str, N){
+  const s = (str || '').replace(/[，、]/g, ',').replace(/[~∼～–—]/g, '-').trim();
+  if (!s) return {ok:true, pages:Array.from({length:N}, (_, i) => i + 1)};
+  const set = new Set();
+  for (const raw of s.split(',')){
+    const t = raw.replace(/\s+/g, '');
+    if (!t) continue;
+    let a, b, m;
+    if ((m = /^(\d+)$/.exec(t))) { a = b = +m[1]; }
+    else if ((m = /^(\d*)-(\d*)$/.exec(t))) { a = m[1] ? +m[1] : 1; b = m[2] ? +m[2] : N; }
+    else return {ok:false, error:'쪽 범위를 이해하지 못했어요: "' + raw.trim() + '"  (예: 1-3, 5, 8-)'};
+    if (a < 1 || b > N) return {ok:false, error:'이 문서는 ' + N + '쪽까지 있어요.'};
+    if (a > b) return {ok:false, error:'범위의 앞 숫자가 뒤 숫자보다 커요: "' + raw.trim() + '"'};
+    for (let p = a; p <= b; p++) set.add(p);
+  }
+  const pages = [...set].sort((x, y) => x - y);
+  return pages.length ? {ok:true, pages} : {ok:false, error:'선택된 쪽이 없어요.'};
+}
+
+/* ---------- 설정 읽기 / 저장 ---------- */
+function readOpts(){
+  const radio = name => (document.querySelector('input[name=' + name + ']:checked') || {}).value;
+  return {
+    paper: $('#paper').value,
+    orient: radio('orient'),
+    mode: radio('mode'),
+    enlarge: $('#enlarge').checked,
+    pct: num($('#pct'), 100, 5, 800),
+    center: $('#center').checked,
+    mt: num($('#mt'), 10, 0, 60), mb: num($('#mb'), 10, 0, 60),
+    ml: num($('#ml'), 10, 0, 60), mr: num($('#mr'), 10, 0, 60),
+    range: $('#range').value,
+    nup: +$('#nup').value,
+    frame: $('#frame').checked,
+    dpi: +$('#dpi').value
+  };
+}
+const SAVE_KEYS = ['paper','enlarge','pct','center','mt','mb','ml','mr','nup','frame','dpi'];
+function saveOpts(){
+  try {
+    const o = readOpts(); const out = {};
+    SAVE_KEYS.forEach(k => out[k] = o[k]); out.orient = o.orient; out.mode = o.mode;
+    localStorage.setItem('printHelper.v1', JSON.stringify(out));
+  } catch (e) {}
+}
+function restoreOpts(){
+  try {
+    const o = JSON.parse(localStorage.getItem('printHelper.v1') || 'null'); if (!o) return;
+    if (PAPERS[o.paper]) $('#paper').value = o.paper;
+    ['pct','mt','mb','ml','mr'].forEach(k => { if (isFinite(o[k])) $('#' + k).value = o[k]; });
+    ['enlarge','center','frame'].forEach(k => { if (typeof o[k] === 'boolean') $('#' + k).checked = o[k]; });
+    if ([1,2,4,6,9].includes(o.nup)) $('#nup').value = String(o.nup);
+    if ([150,200,300].includes(o.dpi)) $('#dpi').value = String(o.dpi);
+    const r1 = document.querySelector('input[name=orient][value=' + o.orient + ']'); if (r1) r1.checked = true;
+    const r2 = document.querySelector('input[name=mode][value=' + o.mode + ']'); if (r2) r2.checked = true;
+  } catch (e) {}
+}
+
+/* ---------- 배치 계산 (순수 함수) ---------- */
+function buildPlan(o){
+  if (!S.pdf) return {error:null, empty:true};
+  const sel = parseRange(o.range, S.n);
+  if (!sel.ok) return {error:sel.error};
+  const list = sel.pages;
+  const mmSize = p => ({w:S.sizes[p - 1][0] * PT, h:S.sizes[p - 1][1] * PT});
+  const base = PAPERS[o.paper];
+  const gap = o.nup > 1 ? 4 : 0;
+
+  const geom = landscape => {
+    const sheetW = landscape ? base.h : base.w, sheetH = landscape ? base.w : base.h;
+    const [cols, rows] = gridFor(o.nup, landscape);
+    const x0 = o.ml, y0 = o.mt;
+    const areaW = sheetW - o.ml - o.mr, areaH = sheetH - o.mt - o.mb;
+    const cellW = (areaW - gap * (cols - 1)) / cols, cellH = (areaH - gap * (rows - 1)) / rows;
+    return {landscape, sheetW, sheetH, cols, rows, x0, y0, areaW, areaH, cellW, cellH, gap};
+  };
+
+  let landscape;
+  if (o.orient === 'portrait') landscape = false;
+  else if (o.orient === 'landscape') landscape = true;
+  else {
+    const f = mmSize(list[0]);
+    const score = L => { const g = geom(L); return (g.cellW > 1 && g.cellH > 1) ? Math.min(g.cellW / f.w, g.cellH / f.h) : -1; };
+    const sp = score(false), sl = score(true);
+    if (Math.abs(sp - sl) < 1e-6) landscape = f.w > f.h; else landscape = sl > sp;
+  }
+  const g = geom(landscape);
+  if (g.areaW < 20 || g.areaH < 20 || g.cellW < 10 || g.cellH < 10) return {error:'여백이 너무 커서 인쇄할 공간이 없어요.'};
+
+  const per = o.nup;
+  const sheets = [];
+  let minS = Infinity, maxS = 0, clipped = 0;
+  for (let i = 0; i < list.length; i += per){
+    const items = [];
+    list.slice(i, i + per).forEach((pageNo, k) => {
+      const pg = mmSize(pageNo);
+      let s;
+      if (o.mode === 'custom') s = o.pct / 100;
+      else { s = Math.min(g.cellW / pg.w, g.cellH / pg.h); if (!o.enlarge) s = Math.min(s, 1); }
+      const col = k % g.cols, row = Math.floor(k / g.cols);
+      const cx = g.x0 + col * (g.cellW + gap), cy = g.y0 + row * (g.cellH + gap);
+      const w = pg.w * s, h = pg.h * s;
+      const px = o.center ? cx + (g.cellW - w) / 2 : cx;
+      const py = o.center ? cy + (g.cellH - h) / 2 : cy;
+      const isClip = (w > g.cellW + 0.05) || (h > g.cellH + 0.05);
+      if (isClip) clipped++;
+      minS = Math.min(minS, s); maxS = Math.max(maxS, s);
+      items.push({pageNo, scale:s, x:px, y:py, w, h, cell:{x:cx, y:cy, w:g.cellW, h:g.cellH}, clipped:isClip});
+    });
+    sheets.push({items});
+  }
+  return {ok:true, g, sheets, pages:list, minS, maxS, clipped, first:mmSize(list[0])};
+}
+
+/* ---------- 쪽 불러오기 / 그리기 ---------- */
+async function getPage(n){
+  if (!S.pageCache.has(n)) S.pageCache.set(n, S.pdf.getPage(n));
+  return S.pageCache.get(n);
+}
+// 한 쪽을 (배율 s, 1mm당 ppm 픽셀)로 그려서 캔버스로 돌려줌. 너무 크면 해상도만 낮춤.
+async function renderPageHwp(pageNo, s, ppm){
+  const pg = S.hwp.pages[pageNo - 1];
+  let k = s * ppm * 25.4 / 7200;
+  k = Math.min(k, 9000 / Math.max(pg.w, pg.h));
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(pg.w * k)); c.height = Math.max(1, Math.ceil(pg.h * k));
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.scale(c.width / pg.w, c.height / pg.h);
+  globalThis.HWPLIB.drawPage(S.hwp, pageNo - 1, ctx);
+  return c;
+}
+async function renderPage(pageNo, s, ppm){
+  if (S.hwp) return renderPageHwp(pageNo, s, ppm);
+  const page = await getPage(pageNo);
+  let k = s * ppm * 25.4 / 72;
+  const base = page.getViewport({scale:1});
+  const maxPx = 9000;
+  k = Math.min(k, maxPx / Math.max(base.width, base.height));
+  const vp = page.getViewport({scale:k});
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.ceil(vp.width)); c.height = Math.max(1, Math.ceil(vp.height));
+  const task = page.render({canvas:c, canvasContext:c.getContext('2d'), viewport:vp, background:'#ffffff'});
+  renderTasks.add(task);
+  try { await task.promise; } finally { renderTasks.delete(task); }
+  return c;
+}
+function cancelRenders(){
+  for (const t of renderTasks) { try { t.cancel(); } catch (e) {} }
+  renderTasks.clear();
+}
+
+/* ---------- 화면 갱신 ---------- */
+function setMsgs(list){
+  const box = $('#msgs'); box.textContent = '';
+  list.forEach(([kind, text]) => {
+    const d = document.createElement('div'); d.className = 'msg ' + kind; d.textContent = text; box.appendChild(d);
+  });
+}
+function refresh(){
+  syncControls();
+  saveOpts();
+  clearTimeout(previewTimer);
+  previewTimer = setTimeout(drawPreview, 90);
+}
+function syncControls(){
+  const o = readOpts();
+  $('#pct').disabled = o.mode !== 'custom';
+  $('#pctWrap').style.opacity = o.mode === 'custom' ? 1 : .45;
+  $('#enlargeWrap').style.display = o.mode === 'fit' ? '' : 'none';
+  $('#frameWrap').style.display = o.nup > 1 ? '' : 'none';
+}
+async function drawPreview(){
+  const tok = ++previewToken;
+  cancelRenders();
+  const o = readOpts();
+  const plan = buildPlan(o);
+  S.plan = plan;
+  const canvas = $('#sheetCanvas');
+  const msgs = [];
+
+  if (!S.pdf){ canvas.hidden = true; $('#toolbar').hidden = true; $('#drop').hidden = false; $('#btnPrint').disabled = true; return; }
+  $('#drop').hidden = true;
+
+  if (!plan.ok){
+    canvas.hidden = true; $('#toolbar').hidden = false;
+    $('#info').textContent = ''; $('#sheetNo').textContent = '–';
+    $('#btnPrint').disabled = true;
+    setMsgs([['err', plan.error]]);
+    return;
+  }
+
+  const g = plan.g, total = plan.sheets.length;
+  S.sheetIdx = Math.min(Math.max(0, S.sheetIdx), total - 1);
+  const sheet = plan.sheets[S.sheetIdx];
+
+  // 안내 문구
+  const f = plan.first;
+  const sc = plan.minS === plan.maxS ? Math.round(plan.minS * 100) + '%' : Math.round(plan.minS * 100) + '–' + Math.round(plan.maxS * 100) + '%';
+  $('#info').innerHTML = '';
+  const line = document.createElement('div');
+  line.textContent = '원본 ' + describeSize(f.w, f.h) + ' (' + Math.round(f.w) + '×' + Math.round(f.h) + 'mm)  →  ' +
+    o.paper + ' ' + (g.landscape ? '가로' : '세로') + ',  배율 ' + sc;
+  const line2 = document.createElement('div');
+  line2.textContent = '선택한 ' + plan.pages.length + '쪽  →  ' + total + '장 인쇄';
+  $('#info').append(line, line2);
+  $('#sheetNo').textContent = (S.sheetIdx + 1) + ' / ' + total;
+  $('#prev').disabled = S.sheetIdx <= 0; $('#next').disabled = S.sheetIdx >= total - 1;
+  $('#toolbar').hidden = false;
+  $('#btnPrint').disabled = false;
+
+  if (plan.clipped) msgs.push(['warn', '배율이 커서 ' + plan.clipped + '쪽의 가장자리가 잘려요. 배율을 줄이거나 "용지에 맞춤"을 고르세요.']);
+  if (Math.min(o.mt, o.mb, o.ml, o.mr) < 5) msgs.push(['warn', '여백이 5mm보다 작아서 프린터에 따라 가장자리가 인쇄되지 않을 수 있어요.']);
+  msgs.push(...S.fileMsgs);
+  setMsgs(msgs);
+
+  // 미리보기 캔버스 크기
+  const view = $('#view');
+  const availW = Math.max(240, view.clientWidth - 40);
+  const availH = Math.max(240, view.clientHeight - 40 - (msgs.length * 44));
+  let cssW = Math.min(availW, availH * g.sheetW / g.sheetH, 760);
+  cssW = Math.max(220, cssW);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  canvas.style.width = cssW + 'px';
+  canvas.style.height = (cssW * g.sheetH / g.sheetW) + 'px';
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssW * dpr * g.sheetH / g.sheetW);
+  canvas.hidden = false;
+  const ppm = canvas.width / g.sheetW;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // 인쇄 가능 영역 점선
+  ctx.save();
+  ctx.strokeStyle = 'rgba(37,99,235,.55)'; ctx.setLineDash([4 * dpr, 4 * dpr]); ctx.lineWidth = dpr;
+  ctx.strokeRect(g.x0 * ppm, g.y0 * ppm, g.areaW * ppm, g.areaH * ppm);
+  ctx.restore();
+
+  for (const it of sheet.items){
+    try {
+      const pc = await renderPage(it.pageNo, it.scale, ppm);
+      if (tok !== previewToken) return;
+      ctx.save();
+      ctx.beginPath(); ctx.rect(it.cell.x * ppm, it.cell.y * ppm, it.cell.w * ppm, it.cell.h * ppm); ctx.clip();
+      ctx.drawImage(pc, it.x * ppm, it.y * ppm, it.w * ppm, it.h * ppm);
+      if (o.nup > 1 && o.frame){
+        ctx.strokeStyle = '#777'; ctx.lineWidth = Math.max(1, .25 * ppm);
+        ctx.strokeRect(it.x * ppm, it.y * ppm, it.w * ppm, it.h * ppm);
+      }
+      ctx.restore();
+    } catch (e) {
+      if (e && e.name === 'RenderingCancelledException') return;
+      if (tok !== previewToken) return;
+      setMsgs([...msgs, ['err', pageErrText(it.pageNo, e)]]);
+    }
+  }
+}
+const pageErrText = (n, e) => n + '쪽을 그리지 못했어요: ' + ((e && e.message) || e);
+
+/* ---------- 파일 열기 ---------- */
+function showFileMsg(kind, text){ setMsgs([[kind, text]]); }
+function setFileInfo(name, n, sizes, extra){
+  const d = sizes[0];
+  const mixed = sizes.some(z => Math.abs(z[0] - d[0]) > 2 || Math.abs(z[1] - d[1]) > 2);
+  const fi = $('#fileInfo'); fi.textContent = '';
+  const b = document.createElement('b'); b.textContent = name;
+  fi.append(b, document.createElement('br'),
+    document.createTextNode(n + '쪽 · 원본 ' + describeSize(d[0] * PT, d[1] * PT) + ' (' + Math.round(d[0] * PT) + '×' + Math.round(d[1] * PT) + 'mm)' + (mixed ? ' · 크기가 다른 쪽이 섞여 있어요' : '') + (extra || '')));
+}
+const HWP_WARN_TXT = {
+  '수식': '수식은 한글과 모양이 조금 다를 수 있어요. 수식이 있는 곳은 인쇄 전에 꼭 확인하세요.',
+  pictureNotShown: '표시하지 못한 그림이 있어요. (회색 칸으로 나와요)',
+  drawError: '일부 개체를 그리지 못했어요.',
+  '그림 읽기 실패': '읽지 못한 그림이 있어요.'
+};
+function hwpWarnings(doc){
+  const out = [];
+  for (const k of Object.keys(doc.warn || {})){
+    if (HWP_WARN_TXT[k]) out.push(['warn', HWP_WARN_TXT[k]]);
+    else if (/^그림 형식/.test(k)) out.push(['warn', '표시할 수 없는 그림 형식이 있어요 (' + k.replace(/^그림 형식\(|\)$/g, '') + ').']);
+    else if (/^도형/.test(k)) out.push(['warn', '일부 도형(' + k.replace(/^도형\(|\)$/g, '') + ')은 그리지 못해 테두리만 표시돼요.']);
+  }
+  out.push(['warn', '한글 파일을 직접 읽어 그린 화면이라 한글과 완전히 같지 않을 수 있어요. 인쇄 전에 미리보기를 확인하세요.']);
+  return out;
+}
+async function openHwpFile(file, buf){
+  const L = globalThis.HWPLIB;
+  if (!L || !L.openHWP || !L.paginate) throw new Error('한글 파일 엔진이 파일 안에 없어요. 인쇄도우미.html을 다시 받아주세요.');
+  const doc = L.openHWP(buf);
+  doc.warn = {};
+  await L.loadImages(doc);
+  L.paginate(doc);
+  if (!doc.pages.length) throw new Error('문서에서 쪽을 찾지 못했어요.');
+  const sizes = doc.pages.map(pg => [pg.w / 100, pg.h / 100]);
+  if (S.pdf && S.pdf.destroy) { try { S.pdf.destroy(); } catch (e) {} }
+  S.hwp = doc; S.pdf = {isHwp:true}; S.pageCache = new Map();
+  S.name = file.name; S.n = doc.pages.length; S.sizes = sizes; S.sheetIdx = 0;
+  // 그림 등 경고는 한 번 그려 본 뒤에야 알 수 있으므로 모든 쪽을 작게 그려 본다
+  try {
+    const cv = document.createElement('canvas'); cv.width = 8; cv.height = 8;
+    const cx = cv.getContext('2d');
+    const t0 = Date.now();
+    for (let i = 0; i < doc.pages.length && Date.now() - t0 < 4000; i++){ cx.save(); L.drawPage(doc, i, cx); cx.restore(); }
+  } catch (e) { doc.warn.drawError = 1; }
+  S.fileMsgs = hwpWarnings(doc);
+  const dist = doc.header && doc.header.distributed ? ' · 배포용 문서' : '';
+  setFileInfo(file.name, S.n, sizes, dist);
+}
+async function openFile(file){
+  if (!file) return;
+  $('#fileInfo').textContent = '불러오는 중…';
+  const restore = () => {
+    if (!S.pdf) $('#fileInfo').textContent = '아직 불러온 파일이 없어요.'; else $('#fileInfo').textContent = S.name + ' (' + S.n + '쪽)';
+  };
+  try {
+    const buf = new Uint8Array(await file.arrayBuffer());
+    const head = String.fromCharCode(...buf.slice(0, 1024));
+    const isCFB = buf[0] === 0xD0 && buf[1] === 0xCF && buf[2] === 0x11 && buf[3] === 0xE0;
+    if (isCFB){
+      try { await openHwpFile(file, buf); }
+      catch (e) { restore(); showFileMsg('err', '한글 파일을 열지 못했어요: ' + ((e && e.message) || e)); return; }
+      setMsgs([]);
+      refresh();
+      return;
+    }
+    if (buf[0] === 0x50 && buf[1] === 0x4B && /\.hwpx$/i.test(file.name)) throw new Error('.hwpx 형식은 아직 열 수 없어요. 한글에서 .hwp로 다시 저장하거나 PDF로 저장해서 열어주세요.');
+    if (head.indexOf('%PDF') < 0) throw new Error('한글(.hwp) 또는 PDF 파일이 아니에요.');
+    await loadLibs();
+    const task = pdfjs.getDocument({data:buf});
+    task.onPassword = (cb, reason) => {
+      const pw = window.prompt(reason === 2 ? '비밀번호가 맞지 않아요. 다시 입력해주세요.' : '이 PDF는 열 때 비밀번호가 필요해요.', '');
+      if (pw === null) task.destroy(); else cb(pw);
+    };
+    const pdf = await task.promise;
+    const sizes = [];
+    const cache = new Map();
+    for (let i = 1; i <= pdf.numPages; i++){
+      const p = await pdf.getPage(i);
+      const vp = p.getViewport({scale:1});
+      sizes.push([vp.width, vp.height]);
+      cache.set(i, Promise.resolve(p));
+    }
+    if (S.pdf && S.pdf !== pdf && S.pdf.destroy) { try { S.pdf.destroy(); } catch (e) {} }
+    S.hwp = null; S.fileMsgs = [];
+    S.pageCache = cache;
+    S.pdf = pdf; S.name = file.name; S.n = pdf.numPages; S.sizes = sizes; S.sheetIdx = 0;
+    setFileInfo(file.name, S.n, sizes);
+    setMsgs([]);
+    refresh();
+  } catch (e) {
+    restore();
+    showFileMsg('err', '파일을 열지 못했어요: ' + ((e && e.message) || e));
+  }
+}
+
+/* ---------- 인쇄 ---------- */
+const urls = [];
+function clearPrintRoot(){
+  $('#printRoot').textContent = '';
+  urls.splice(0).forEach(u => URL.revokeObjectURL(u));
+  $('#pageStyle').textContent = '';
+}
+const toBlob = (canvas, q) => new Promise(res => canvas.toBlob(res, 'image/jpeg', q));
+async function buildPrintRoot(onProgress){
+  const o = readOpts();
+  const plan = buildPlan(o);
+  if (!plan.ok) throw new Error(plan.error || '인쇄할 수 없어요.');
+  const g = plan.g;
+  clearPrintRoot();
+  $('#pageStyle').textContent = '@page{size:' + g.sheetW + 'mm ' + g.sheetH + 'mm;margin:0}';
+  const root = $('#printRoot');
+  const ppm = o.dpi / 25.4;
+  const totalItems = plan.pages.length; let done = 0;
+  for (const sh of plan.sheets){
+    const sheet = document.createElement('div'); sheet.className = 'sheet';
+    sheet.style.width = g.sheetW + 'mm'; sheet.style.height = (g.sheetH - 0.4) + 'mm';
+    for (const it of sh.items){
+      if (printCancelled) throw new Error('취소했어요.');
+      const pc = await renderPage(it.pageNo, it.scale, ppm);
+      const blob = await toBlob(pc, 0.93);
+      const url = URL.createObjectURL(blob); urls.push(url);
+      pc.width = pc.height = 1; // 메모리 반환
+      const cell = document.createElement('div'); cell.className = 'cell';
+      Object.assign(cell.style, {left:it.cell.x + 'mm', top:it.cell.y + 'mm', width:it.cell.w + 'mm', height:it.cell.h + 'mm'});
+      const pg = document.createElement('div'); pg.className = 'pg';
+      Object.assign(pg.style, {left:(it.x - it.cell.x) + 'mm', top:(it.y - it.cell.y) + 'mm', width:it.w + 'mm', height:it.h + 'mm'});
+      const img = new Image(); img.src = url; img.alt = '';
+      pg.appendChild(img);
+      if (o.nup > 1 && o.frame){ const fr = document.createElement('div'); fr.className = 'fr'; pg.appendChild(fr); }
+      cell.appendChild(pg); sheet.appendChild(cell);
+      done++; if (onProgress) onProgress(done, totalItems);
+    }
+    root.appendChild(sheet);
+  }
+  await Promise.all([...root.querySelectorAll('img')].map(im => im.decode().catch(() => {})));
+  return plan;
+}
+async function doPrint(){
+  if (!S.pdf || !S.plan || !S.plan.ok) return;
+  printCancelled = false;
+  cancelRenders(); previewToken++;
+  $('#busy').hidden = false; $('#busyBar').value = 0;
+  $('#busyText').textContent = '인쇄 준비 중…';
+  try {
+    await buildPrintRoot((d, t) => { $('#busyBar').max = t; $('#busyBar').value = d; $('#busyText').textContent = '인쇄 준비 중… ' + d + ' / ' + t + '쪽'; });
+    $('#busy').hidden = true;
+    window.print();
+  } catch (e) {
+    $('#busy').hidden = true;
+    if (!printCancelled) setMsgs([['err', '인쇄를 준비하지 못했어요: ' + ((e && e.message) || e)]]);
+    clearPrintRoot();
+  }
+  refresh();
+}
+window.addEventListener('afterprint', () => { clearPrintRoot(); refresh(); });
+
+/* ---------- 이벤트 ---------- */
+function bind(){
+  const open = () => $('#fileInput').click();
+  $('#btnOpen').addEventListener('click', open);
+  $('#btnOpenTop').addEventListener('click', open);
+  $('#fileInput').addEventListener('change', e => { openFile(e.target.files[0]); e.target.value = ''; });
+
+  ['dragenter','dragover'].forEach(t => window.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.add('over'); }));
+  ['dragleave','drop'].forEach(t => window.addEventListener(t, e => { e.preventDefault(); $('#drop').classList.remove('over'); }));
+  window.addEventListener('drop', e => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) openFile(f); });
+
+  document.querySelectorAll('input,select').forEach(el => {
+    if (el.id === 'fileInput') return;
+    el.addEventListener('input', () => {
+      if (['mt','mb','ml','mr'].includes(el.id) && $('#linkm').checked){
+        ['mt','mb','ml','mr'].forEach(k => { if (k !== el.id) $('#' + k).value = el.value; });
+      }
+      if (['paper','range','nup','mt','mb','ml','mr','pct'].includes(el.id) || el.name === 'orient' || el.name === 'mode') S.sheetIdx = el.id === 'range' || el.id === 'nup' ? 0 : S.sheetIdx;
+      refresh();
+    });
+    el.addEventListener('change', refresh);
+  });
+  document.querySelectorAll('[data-m]').forEach(b => b.addEventListener('click', () => {
+    ['mt','mb','ml','mr'].forEach(k => $('#' + k).value = b.dataset.m); refresh();
+  }));
+  document.querySelectorAll('[data-pct]').forEach(b => b.addEventListener('click', () => {
+    $('#pct').value = b.dataset.pct; document.querySelector('input[name=mode][value=custom]').checked = true; refresh();
+  }));
+  $('#prev').addEventListener('click', () => { S.sheetIdx--; refresh(); });
+  $('#next').addEventListener('click', () => { S.sheetIdx++; refresh(); });
+  $('#btnPrint').addEventListener('click', doPrint);
+  $('#busyCancel').addEventListener('click', () => { printCancelled = true; cancelRenders(); });
+  window.addEventListener('resize', () => { clearTimeout(previewTimer); previewTimer = setTimeout(drawPreview, 150); });
+}
+
+restoreOpts();
+bind();
+syncControls();
+loadLibs().catch(e => showFileMsg('err', 'PDF 엔진을 준비하지 못했어요(한글 파일은 그대로 열 수 있어요): ' + ((e && e.message) || e)));
+window.__app = {S, readOpts, buildPlan, parseRange, buildPrintRoot, clearPrintRoot, openFile, refresh, drawPreview};
+})();
+</script>
+</body>
+</html>
